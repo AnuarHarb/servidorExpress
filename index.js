@@ -2,6 +2,9 @@
 const express = require("express");
 const fs = require("fs");
 const bodyParser = require("body-parser");
+const mongoose = require("mongoose");
+require("dotenv").config();
+
 // Iniciamos express
 const app = express();
 const port = 3000;
@@ -9,24 +12,44 @@ const port = 3000;
 // Traducir json
 app.use(bodyParser.json());
 
-// read JSON
-const archivoJSON = fs.readFileSync("estudiantes.json");
-const dataBase = JSON.parse(archivoJSON);
+// Database URl
+const uri = `mongodb+srv://anuar:${process.env.MONGO_PASSWORD}@codecluster.pc6xcdb.mongodb.net/?retryWrites=true&w=majority`;
 
-// routes
-app.get("/", (request, response) => {
-  response.send(dataBase.estudiantes);
+const client = {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+};
+
+mongoose.connect(uri, client, (err) => {
+  console.log("conecting...");
+  if (err) {
+    console.log("error in connection", err);
+  } else {
+    console.log("mongodb is connected");
+  }
 });
 
-app.post("/", (request, response) => {
-  const newStudent = request.body;
-  // Crear nuevo estudiante
-  dataBase.estudiantes.push(newStudent);
-  // Escribir en el archivo
-  const json = JSON.stringify(dataBase);
-  fs.writeFile("estudiantes.json", json, "utf8", () => {
-    response.send("Estudiante agregado exitosamente");
-  });
+// Data Models
+const studentSchema = new mongoose.Schema({
+  name: String,
+  lastName: String,
+});
+
+const Student = mongoose.model("Student", studentSchema);
+
+// routes
+// Traer todos los estudiantes
+app.get("/", async (request, response) => {
+  const students = await Student.find({});
+  console.log(students);
+  response.json(students);
+});
+
+// Crear nuevo estudiante
+app.post("/", async (request, response) => {
+  let student = new Student(request.body);
+  const newStudent = await student.save();
+  response.send(newStudent);
 });
 
 app.put("/:id", (request, response) => {
@@ -46,25 +69,17 @@ app.put("/:id", (request, response) => {
   });
 });
 
-app.delete("/:id", (request, response) => {
+app.delete("/:id", async (request, response) => {
   const id = request.params.id;
-  const selected = dataBase.estudiantes.findIndex(
-    (estudiante) => estudiante.id == id
-  );
+  const deleted = await Student.findOneAndDelete({
+    _id: id,
+  });
 
-  if (selected < 0) {
-    response.status(404).send("Estudiante no encontrado");
-    return;
+  if (deleted === null) {
+    response.send("Estudiante no existe");
   }
 
-  // Remover elemento del array
-  dataBase.estudiantes.splice(selected, 1);
-
-  // Escribir en el archivo
-  const json = JSON.stringify(dataBase);
-  fs.writeFile("estudiantes.json", json, "utf8", () => {
-    response.send("Estudiante borrado exitosamente");
-  });
+  response.send("Estudiante eliminado");
 });
 
 // servidor
